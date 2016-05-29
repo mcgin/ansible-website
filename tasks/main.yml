@@ -1,0 +1,81 @@
+---
+- name: "create /srv/www/{{ website_domain }}"
+  become: 'yes'
+  become_method: sudo
+  file:
+    path: "/srv/www/{{ website_domain }}"
+    state: directory 
+    mode: 0775
+    owner: nginx
+    group: www-data
+
+- name: temp throw something in index.html
+  become: 'yes'
+  become_method: sudo
+  copy:
+    content: "{{ website_domain }}"
+    dest: "/srv/www/{{ website_domain }}/index.html"
+    directory_mode: "u=rw,g=r,o=r" 
+    mode: "u=rw,g=r,o=r"
+    owner: nginx
+    group: www-data
+
+- name: "configure insecure {{ website_domain }}"
+  become: 'yes'
+  become_method: sudo
+  template:
+    src: "files/insecure_site_template"
+    dest: "/etc/nginx/sites-enabled/insecure.{{ website_domain }}"
+    mode: "u=rw,g=r,o=r"
+    owner: nginx
+    group: www-data
+  notify:
+    - reload nginx
+
+- name: install letsencrypt
+  apt: "pkg={{item}} state=installed"
+  become: 'yes'
+  become_method: sudo
+  with_items:
+    - letsencrypt
+
+- name: reload nginx
+  become: yes
+  become_method: sudo
+  service: name=nginx state=restarted
+
+- name: obtain a certificate for site
+  become: 'yes'
+  become_method: sudo
+  command: "letsencrypt certonly --email letsencrypt@{{ website_domain }} --agree-tos --webroot -w /srv/www/{{ website_domain }} -d {{ website_domain }} -d www.{{ website_domain }}"
+  args:
+    creates: "/etc/letsencrypt/live/{{ website_domain }}/fullchain.pem"
+
+- name:  generate a strong Diffie-Hellman group
+  become: 'yes'
+  become_method: sudo
+  command: openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
+  args:
+    creates: /etc/ssl/certs/dhparam.pem
+
+- name: "configure secure {{ website_domain }}"
+  become: 'yes'
+  become_method: sudo
+  template:
+    src: "files/secure_site_template"
+    dest: "/etc/nginx/sites-enabled/{{ website_domain }}"
+    mode: "u=rw,g=r,o=r"
+    owner: nginx
+    group: www-data
+  notify:
+    - reload nginx
+- cron: 
+    name: "renew letsencrypt" 
+    minute: "0" 
+    hour: "5,17"
+    job: "/usr/bin/letsencrypt renew --agree-tos --email letsencrypt@{{ website_domain }} > /var/log/letsencrypt.log"
+- cron: 
+    name: "reload nginx" 
+    minute: "5" 
+    hour: "5,17"
+    job: "service nginx reload"

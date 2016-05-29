@@ -1,0 +1,16 @@
+server {
+    listen 80;
+    server_name {{ website_domain }} www.{{ website_domain }};
+    
+    root   /srv/www/{{ website_domain }};
+
+	# Allow letsencrypt client to call back when setting up secrets
+    location ~ /.well-known  {
+    	allow    all;
+    }
+
+    #Everything else is redirected to secure site
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
