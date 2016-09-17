@@ -13,12 +13,26 @@
   become: 'yes'
   become_method: sudo
   copy:
-    content: "{{ website_domain }}"
+    content: "Default content for {{ website_domain }} as none provided on {{ ansible_date_time.iso8601 }}"
     dest: "/srv/www/{{ website_domain }}/index.html"
     directory_mode: "u=rw,g=r,o=r" 
     mode: "u=rw,g=r,o=r"
     owner: nginx
     group: www-data
+  when: site_content is undefined
+
+- name: Copy the site content from a local directoy
+  become: 'yes'
+  become_method: sudo
+  copy:
+    src: "{{ site_content }}"
+    dest: "/srv/www/{{ website_domain }}/"
+    directory_mode: "u=rw,g=r,o=r"
+    force: yes
+    mode: "u=rw,g=r,o=r"
+    owner: nginx
+    group: www-data
+  when: site_content is defined
 
 - name: "configure insecure {{ website_domain }}"
   become: 'yes'
@@ -73,9 +87,11 @@
     name: "renew letsencrypt" 
     minute: "0" 
     hour: "5,17"
+    user: root
     job: "/usr/bin/letsencrypt renew --agree-tos --email letsencrypt@{{ website_domain }} > /var/log/letsencrypt.log"
 - cron: 
     name: "reload nginx" 
     minute: "5" 
     hour: "5,17"
+    user: root
     job: "service nginx reload"
